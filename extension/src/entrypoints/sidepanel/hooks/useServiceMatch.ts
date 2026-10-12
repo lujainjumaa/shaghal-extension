@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { matchService, type ServiceMatch } from '../../../lib/endpoints';
 import { matchUrl } from '../../../lib/url';
+import { apiErrorMessage } from '../../../lib/api';
 
 export type MatchState =
   | { status: 'no-page' }
@@ -45,7 +46,7 @@ export function useServiceMatch(pageUrl: string | null): { state: MatchState; re
           cache.set(key, { match: result.data, expires: Date.now() + CACHE_TTL_MS });
           setFailure(null);
         } else {
-          setFailure({ key, message: result.error.message });
+          setFailure({ key, message: apiErrorMessage(result.error) });
         }
         setGeneration((value) => value + 1);
       });

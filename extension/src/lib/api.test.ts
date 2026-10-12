@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { formErrorMessage, apiRequest } from './api';
+import { apiErrorMessage, formErrorMessage, apiRequest } from './api';
 import { API_BASE, IS_LOCAL_API } from './config';
+import { i18next } from './i18n';
 
 function stubFetch(...responses: Array<Response | Error>) {
   const fetchMock = vi.fn<typeof fetch>();
@@ -13,6 +14,29 @@ function stubFetch(...responses: Array<Response | Error>) {
 }
 
 describe('apiRequest', () => {
+  it.each([
+    ['HTML', () => new Response('<html>Bad gateway</html>', { status: 502 })],
+    ['missing message', () => Response.json({ error: 'UPSTREAM_ERROR' }, { status: 502 })],
+    ['blank message', () => Response.json({ message: '  ' }, { status: 502 })],
+  ])('explains an HTTP/2 %s error without a status text', async (_name, response) => {
+    stubFetch(response());
+    const result = await apiRequest('/x');
+    expect(result.ok === false && result.error.message).toBe(
+      'The server answered with an error (502). Try again in a moment.',
+    );
+  });
+
+  it('translates a message-less error into Arabic', async () => {
+    await i18next.changeLanguage('ar');
+    try {
+      stubFetch(Response.json({}, { status: 503 }));
+      const result = await apiRequest('/x');
+      expect(result.ok === false && result.error.message).toBe('أجاب الخادم بخطأ (503). حاول مجدداً بعد قليل.');
+    } finally {
+      await i18next.changeLanguage('en');
+    }
+  });
+
   it('tests run against the local API, which needs no human verification', () => {
     expect(IS_LOCAL_API).toBe(true);
   });
@@ -60,7 +84,7 @@ describe('apiRequest', () => {
     const result = await apiRequest('/x');
     expect(result.ok === false && result.error).toMatchObject({
       error: 'UNKNOWN_ERROR',
-      message: 'Bad Gateway',
+      message: 'The server answered with an error (502). Try again in a moment.',
       status: 502,
     });
   });
@@ -155,6 +179,30 @@ it('explains shared-network cooldowns without losing the draft', () => {
   );
 });
 
+describe('visible request references', () => {
+  const error = { error: 'UPSTREAM_ERROR', message: 'Try again.', status: 502, requestId: 'request-123' };
+
+  it('keeps the server reference in ordinary and cooldown form errors', () => {
+    expect(apiErrorMessage(error)).toBe('Try again. Reference: request-123');
+    expect(formErrorMessage(error)).toBe('Try again. Reference: request-123');
+    expect(formErrorMessage({ ...error, status: 429 })).toContain('Reference: request-123');
+  });
+
+  it('omits empty references', () => {
+    expect(apiErrorMessage({ ...error, requestId: '  ' })).toBe('Try again.');
+    expect(apiErrorMessage({ ...error, requestId: undefined })).toBe('Try again.');
+  });
+
+  it('translates the reference label into Arabic', async () => {
+    await i18next.changeLanguage('ar');
+    try {
+      expect(apiErrorMessage(error)).toBe('Try again. المرجع: request-123');
+    } finally {
+      await i18next.changeLanguage('en');
+    }
+  });
+});
+
 describe('answers the panel cannot read', () => {
   it('ignores a Retry-After that is neither seconds nor a date, and cools down for a minute', async () => {
     stubFetch(
@@ -177,11 +225,16 @@ describe('answers the panel cannot read', () => {
     );
     expect(await apiRequest('/x')).toEqual({
       ok: false,
-      error: { error: 'UNKNOWN_ERROR', message: 'Internal Server Error', status: 500, retryAfterSeconds: undefined },
+      error: {
+        error: 'UNKNOWN_ERROR',
+        message: 'The server answered with an error (500). Try again in a moment.',
+        status: 500,
+        retryAfterSeconds: undefined,
+      },
     });
     expect(await apiRequest('/x')).toMatchObject({
       ok: false,
-      error: { error: 'UNKNOWN_ERROR', message: 'Bad Request' },
+      error: { error: 'UNKNOWN_ERROR', message: 'The server answered with an error (400). Try again in a moment.' },
     });
   });
 });

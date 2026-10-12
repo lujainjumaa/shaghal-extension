@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { apiErrorMessage } from '../../../lib/api';
 import { getCategories, type CategoryItem, type ServiceRecord } from '../../../lib/endpoints';
 import { submitCorrection, type CorrectionType } from '../../../lib/submit';
 import { serviceName } from '../../../lib/serviceName';
@@ -151,7 +152,7 @@ export function CorrectionForm(props: { service: ServiceRecord; onBack: () => vo
           if (result.ok) {
             setCategoryOptions(result.data);
             optionsLanguage.current = wanted;
-          } else setError(t('correction.categoriesFailed', { message: result.error.message }));
+          } else setError(t('correction.categoriesFailed', { message: apiErrorMessage(result.error) }));
         });
       }
     }

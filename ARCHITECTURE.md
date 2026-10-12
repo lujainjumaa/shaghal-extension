@@ -108,6 +108,11 @@ validated before UI code uses them; form submissions require a receipt ID.
 Malformed responses become errors. A timeout or lost response can leave a write's
 outcome uncertain.
 
+An error without a usable API message shows a translated
+notice with its status code. Visible API errors include the server's request
+reference when present, including vote notices, form cooldowns and upload errors.
+The reference is ordinary selectable text so it can be copied into a bug report.
+
 | Route                                                         | Used for                                                     |
 | ------------------------------------------------------------- | ------------------------------------------------------------ |
 | `POST /services/match`                                        | Matching the page to a service.                              |

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { applyStoredLanguage } from '../../lib/i18n';
+import { apiErrorMessage } from '../../lib/api';
 import { getServiceBySlug, type CatalogService, type ServiceRecord } from '../../lib/endpoints';
 import { watchSavedLanguage } from '../../lib/settings';
 import { isOwnSite, normalizeServiceUrl } from '../../lib/url';
@@ -59,7 +60,7 @@ export function SidePanelApp() {
     if (!result.ok) {
       setOpenFailure({
         pageUrl: activeTab.url,
-        message: t('app.openFailed', { name: service.name, message: result.error.message }),
+        message: t('app.openFailed', { name: service.name, message: apiErrorMessage(result.error) }),
       });
       return;
     }

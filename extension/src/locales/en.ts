@@ -258,6 +258,8 @@ export const en = {
   },
 
   api: {
+    serverError: 'The server answered with an error ({{status}}). Try again in a moment.',
+    reference: 'Reference: {{id}}',
     timeout: 'Unblock Syria took too long to answer. Your request may have arrived; check before sending again.',
     unconfirmed: 'The request could not be confirmed. It may have arrived; check before sending again.',
     network: 'Could not reach Unblock Syria. Check your connection.',

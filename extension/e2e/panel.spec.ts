@@ -9,6 +9,51 @@ async function browseToTestPage(page: Page, panel: Page): Promise<void> {
   await expect(panel.getByRole('button', { name: 'Report what works' })).toBeVisible({ timeout: 15_000 });
 }
 
+test('shows an HTTP/2 gateway error on the page card', async ({ page, panel, context }) => {
+  await context.route('https://api.unblocksyria.com/services/match', (route) =>
+    route.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad gateway</html>' }),
+  );
+  await page.goto(`${TEST_PAGE_ORIGIN}/`);
+  await page.bringToFront();
+  await expect(panel.getByText('The server answered with an error (502). Try again in a moment.')).toBeVisible();
+});
+
+test('shows a selectable request reference when a vote fails', async ({ page, panel, context }) => {
+  await browseToTestPage(page, panel);
+  await context.route('https://api.unblocksyria.com/services/netflix/vote', (route) =>
+    route.fulfill({ status: 502, json: { error: 'UPSTREAM_ERROR', requestId: 'vote-reference-123' } }),
+  );
+  await panel.getByRole('button', { name: /I need this/ }).click();
+  const error = panel.getByText(/Reference: vote-reference-123/);
+  await expect(error).toBeVisible();
+  expect(
+    await error.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return selection?.toString();
+    }),
+  ).toContain('Reference: vote-reference-123');
+  await expect(error).not.toHaveCSS('user-select', 'none');
+});
+
+test('keeps the request reference when a report fails', async ({ page, panel, context }) => {
+  await browseToTestPage(page, panel);
+  await context.route('https://api.unblocksyria.com/functionality-reports', (route) =>
+    route.fulfill({
+      status: 400,
+      json: { error: 'INVALID_REPORT', message: 'Review the report.', requestId: 'report-123' },
+    }),
+  );
+  await panel.getByRole('button', { name: 'Report what works' }).click();
+  await panel.getByRole('radiogroup', { name: 'Core use' }).getByRole('radio', { name: 'Works' }).click();
+  await panel.getByPlaceholder('What happened?').fill('Works without a VPN.');
+  await panel.getByRole('button', { name: 'Send report' }).click();
+  await expect(panel.getByText('Review the report. Reference: report-123')).toBeVisible();
+});
+
 test('loads the built extension and sends a vote against the stubbed API', async ({ page, panel, api }) => {
   await browseToTestPage(page, panel);
 

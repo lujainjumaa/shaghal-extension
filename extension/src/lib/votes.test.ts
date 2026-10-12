@@ -12,6 +12,14 @@ beforeEach(() => {
 });
 
 describe('setVote', () => {
+  it.each([429, 502])('shows the server reference for a refused vote with status %s', async (status) => {
+    answer({ error: 'REFUSED', requestId: 'vote-123' }, status);
+    const outcome = await setVote('netflix', true);
+    expect(outcome.ok === false && outcome.message).toContain('Reference: vote-123');
+    if (status === 502) expect(outcome.ok === false && outcome.message).toContain('(502)');
+    expect(await hasVoted('netflix')).toBe(false);
+  });
+
   it('remembers a vote and returns the new count', async () => {
     answer({ success: true, voteCount: 12 });
     expect(await setVote('netflix', true)).toEqual({ ok: true, voted: true, voteCount: 12 });

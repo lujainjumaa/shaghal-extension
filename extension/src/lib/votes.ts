@@ -1,5 +1,6 @@
 import { removeVoteForService, voteForService } from './endpoints';
 import { i18next } from './i18n';
+import { apiErrorMessage } from './api';
 
 const VOTED_KEY = 'votedServiceSlugs';
 
@@ -55,7 +56,7 @@ export async function setVote(slug: string, wantVoted: boolean): Promise<VoteOut
     return { ok: true, voted: false, voteCount: null };
   }
   if (result.error.status === 429) {
-    return { ok: false, message: i18next.t('votes.rateLimited') };
+    return { ok: false, message: apiErrorMessage(result.error, i18next.t('votes.rateLimited')) };
   }
-  return { ok: false, message: result.error.message };
+  return { ok: false, message: apiErrorMessage(result.error) };
 }

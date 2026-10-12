@@ -12,16 +12,22 @@ export interface ApiError {
   discard?: () => Promise<void>;
 }
 
+/** Adds the server's reference to the visible error, including translated notices. */
+export function apiErrorMessage(error: ApiError, message = error.message): string {
+  const reference = error.requestId?.trim();
+  return reference ? `${message} ${i18next.t('api.reference', { id: reference })}` : message;
+}
+
 /**
  * The message to show on a form. A 429 becomes a cooldown notice with the wait
  * from Retry-After, or 60 s when absent.
  */
 export function formErrorMessage(error: ApiError): string {
-  if (error.status !== 429) return error.message;
+  if (error.status !== 429) return apiErrorMessage(error);
   const seconds = Math.max(1, Math.ceil(error.retryAfterSeconds ?? 60));
   const amount = seconds < 60 ? seconds : Math.ceil(seconds / 60);
   const unit = i18next.t(seconds < 60 ? 'api.cooldownSecond' : 'api.cooldownMinute', { count: amount });
-  return i18next.t('api.cooldown', { wait: `${amount} ${unit}` });
+  return apiErrorMessage(error, i18next.t('api.cooldown', { wait: `${amount} ${unit}` }));
 }
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -61,16 +67,17 @@ function extractRetryAfter(response: Response): number | undefined {
 }
 
 async function parseErrorBody(response: Response): Promise<{ error: string; message: string; requestId?: string }> {
+  const fallback = i18next.t('api.serverError', { status: response.status });
   try {
     const body = (await response.json()) as unknown;
     const fields = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
     return {
       error: typeof fields.error === 'string' ? fields.error : 'UNKNOWN_ERROR',
-      message: typeof fields.message === 'string' ? fields.message : response.statusText,
+      message: typeof fields.message === 'string' && fields.message.trim() ? fields.message : fallback,
       requestId: typeof fields.requestId === 'string' ? fields.requestId : undefined,
     };
   } catch {
-    return { error: 'UNKNOWN_ERROR', message: response.statusText };
+    return { error: 'UNKNOWN_ERROR', message: fallback };
   }
 }
 
