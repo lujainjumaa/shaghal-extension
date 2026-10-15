@@ -23,7 +23,11 @@ function isExpired(key: string): boolean {
  * the body, never the form contents. If the body changed since an uncertain
  * attempt, the old receipt is looked up instead of sending. A receipt the API
  * no longer knows (expired, or older than 24 hours) is dropped. One it can't
- * confirm stays until the user discards it.
+ * confirm stays until the user discards it. A new-service send keeps its
+ * receipt per submitted address; a receipt an older build left in one shared
+ * slot is adopted when the details match, and is checked without being written
+ * to when they don't, so once it is resolved or can no longer be checked the
+ * current send stores its own receipt again.
  */
 export async function submitWithReceipt(
   path: string,
@@ -32,13 +36,29 @@ export async function submitWithReceipt(
 ): Promise<ApiResult<unknown>> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(body)));
   const fingerprint = Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
-  const slot = `pendingReceipt:${path}:${typeof body.serviceId === 'string' ? body.serviceId : 'new-service'}`;
+  const id =
+    typeof body.serviceId === 'string' ? body.serviceId : typeof body.url === 'string' ? body.url : 'new-service';
+  const slot = `pendingReceipt:${path}:${id}`;
   let receipt: PendingReceipt;
   let retained: boolean;
   try {
     let stored = (await chrome.storage.session.get(slot))[slot] as PendingReceipt | undefined;
+    let storedSlot = slot;
+    if (stored === undefined && path === '/submissions') {
+      const sharedSlot = `pendingReceipt:${path}:new-service`;
+      const fallback = (await chrome.storage.session.get(sharedSlot))[sharedSlot] as PendingReceipt | undefined;
+      if (fallback !== undefined) {
+        stored = fallback;
+        if (fallback.fingerprint === fingerprint) {
+          await chrome.storage.session.set({ [slot]: fallback });
+          await chrome.storage.session.remove(sharedSlot).catch(() => undefined);
+        } else {
+          storedSlot = sharedSlot;
+        }
+      }
+    }
     if (stored !== undefined && isExpired(stored.key)) {
-      await chrome.storage.session.remove(slot);
+      await chrome.storage.session.remove(storedSlot);
       stored = undefined;
     }
     if (stored && stored.fingerprint !== fingerprint) {
@@ -55,7 +75,7 @@ export async function submitWithReceipt(
         },
       });
       if (prior.ok && prior.data.state === 'expired') {
-        await chrome.storage.session.remove(slot);
+        await chrome.storage.session.remove(storedSlot);
         stored = undefined;
       } else if (
         prior.ok &&
@@ -65,7 +85,7 @@ export async function submitWithReceipt(
         prior.data.status >= 200 &&
         prior.data.status < 500
       ) {
-        await chrome.storage.session.remove(slot);
+        await chrome.storage.session.remove(storedSlot);
         return {
           ok: false,
           error: {
@@ -84,7 +104,7 @@ export async function submitWithReceipt(
             error: 'DELIVERY_UNCONFIRMED',
             message: uncertainMessage(),
             status: 409,
-            discard: () => chrome.storage.session.remove(slot),
+            discard: () => chrome.storage.session.remove(storedSlot),
           },
         };
       }
